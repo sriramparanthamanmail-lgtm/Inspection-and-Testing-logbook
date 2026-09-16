@@ -34,5 +34,10 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "categories": [
+    "productivity",
+    "business",
+    "utilities"
   ]
 }
