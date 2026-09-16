@@ -171,7 +171,7 @@
       <span id="syncStatus" class="muted" style="font-size:0.75rem;"></span>
       <button class="btn secondary" id="googleSignInBtn">🔐 Sign in with Google</button>
       <button class="btn secondary" id="driveBackupBtn" style="display:none;">☁️ Backup to Drive</button>
-      <button class="btn secondary" id="driveRestoreBtn" style="display:none;">⬇️ Restore from Drive</button>
+      <button class="btn secondary" id="driveRestoreBtn" style="display:none;">🔀 Merge from Drive</button>
       <button class="btn secondary" id="installBtn" style="display:none;">📲 Install App</button>
       <button class="btn secondary" id="exportBtn">Export CSV</button>
       <button class="btn secondary" id="pdfBtn">📄 PDF Report</button>
@@ -609,12 +609,13 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   if (!data.date || !data.hours) { alert('Date and Hours are required.'); return; }
 
   let entry;
+  const now = Date.now();
   if (editingId) {
     const idx = entries.findIndex(x => x.id === editingId);
-    entry = { ...entries[idx], ...data };
+    entry = { ...entries[idx], ...data, updatedAt: now };
     entries[idx] = entry;
   } else {
-    entry = { id: uid(), ...data };
+    entry = { id: uid(), ...data, updatedAt: now };
     entries.push(entry);
   }
   await putEntry(entry);
@@ -891,8 +892,7 @@ async function driveBackup() {
 
 async function driveRestore() {
   if (!accessToken) { setSyncStatus('Sign in first.'); return; }
-  if (!confirm('This will replace all entries currently on this device with the backup from Drive. Continue?')) return;
-  setSyncStatus('Restoring...');
+  setSyncStatus('Merging...');
   try {
     const fileId = await driveFindFileId();
     if (!fileId) { setSyncStatus('No backup found on Drive yet.'); return; }
@@ -900,13 +900,31 @@ async function driveRestore() {
       headers: { Authorization: 'Bearer ' + accessToken },
     });
     const data = await res.json();
-    entries = data.entries || [];
+    const driveEntries = data.entries || [];
+
+    // Merge by id: for entries present on both sides, keep whichever was updated more recently.
+    // Entries that exist only locally or only on Drive are both kept — nothing gets silently dropped.
+    const merged = new Map();
+    for (const e of entries) merged.set(e.id, e);
+    let added = 0, updated = 0;
+    for (const de of driveEntries) {
+      const local = merged.get(de.id);
+      if (!local) {
+        merged.set(de.id, de);
+        added++;
+      } else {
+        const localTime = local.updatedAt || 0;
+        const driveTime = de.updatedAt || 0;
+        if (driveTime > localTime) { merged.set(de.id, de); updated++; }
+      }
+    }
+    entries = Array.from(merged.values());
     for (const e of entries) await putEntry(e);
     renderAll();
-    setSyncStatus('Restored from Drive ✓ ' + new Date().toLocaleTimeString());
+    setSyncStatus(`Merged ✓ +${added} new, ${updated} updated — ${new Date().toLocaleTimeString()}`);
   } catch (e) {
     console.error(e);
-    setSyncStatus('Restore failed — see console.');
+    setSyncStatus('Merge failed — see console.');
   }
 }
 
