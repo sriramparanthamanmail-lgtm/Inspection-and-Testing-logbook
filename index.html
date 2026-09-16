@@ -783,6 +783,12 @@ document.getElementById('driveBackupBtn').addEventListener('click', driveBackup)
 document.getElementById('driveRestoreBtn').addEventListener('click', driveRestore);
 
 /* ---------- Init ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((e) => console.error('SW registration failed', e));
+  });
+}
+
 (async () => {
   await loadEntries();
   renderAll();
